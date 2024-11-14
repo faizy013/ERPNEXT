@@ -1,0 +1,371 @@
+# Child Doctype Integration through API's
+
+
+import frappe
+import json
+
+
+# -----------GET DETAILS--------------------
+@frappe.whitelist()
+def get_hospital_details(hospital_id=None):
+    return frappe.db.sql(f"""SELECT hospital_no, hospital_name, phone_number, address, email, hospital_type FROM `tabMain Hospital Data` WHERE owner='Administrator';
+""", as_dict=True)
+
+
+# @frappe.whitelist(allow_guest=True)
+# def add_details(hospital_no, hospital_name, phone_number, address, email, hospital_type):
+#     # Ensure phone number is not too long
+#     phone_number = str(phone_number)[:15]  # limit to 15 characters
+#     add_details = frappe.get_doc({
+#         "doctype": "Main Hospital Data",
+#         "hospital_no": hospital_no,
+#         "hospital_name": hospital_name,
+#         "phone_number": phone_number,
+#         "address": address,
+#         "email": email,
+#         "hospital_type": hospital_type
+#     })
+#     add_details.insert()
+#     frappe.db.commit()
+
+# -----------INSERT FIELDS------------------
+
+@frappe.whitelist(allow_guest=True)
+def add_details():
+    data = frappe.form_dict  # This retrieves the JSON data as a dictionary
+    # phone_number = str(phone_number)[:15] 
+    add_details = frappe.get_doc({
+        "doctype": "Main Hospital Data",
+        "hospital_no": data.get("hospital_no"),
+        "hospital_name": data.get("hospital_name"),
+        "phone_number": data.get("phone_number"),
+        "address": data.get("address"),
+        "email": data.get("email"),
+        "hospital_type": data.get("hospital_type")
+    })
+    
+    add_details.insert()
+    frappe.db.commit()
+    return "Success!"
+
+
+# @frappe.whitelist(allow_guest=True)
+# def update_details():
+#     frappe.db.sql("""UPDATE 
+#     `tabMain Hospital Data` 
+#     SET hospital_name='Rashid Latif Hospital',
+#                   phone_number='123456789'
+#     WHERE name='No-010'""")
+#     frappe.db.commit()
+
+#     return "Success!"
+
+# --------UPDATE FIELDS---------------
+
+@frappe.whitelist(allow_guest=True)
+def update_details(name, hospital_name, phone_number):
+    data = json.loads(frappe.request.data)
+
+    name = data.get("name")
+    hospital_name = data.get("hospital_name")
+    phone_number = data.get("phone_number")
+    frappe.db.sql("""
+        UPDATE `tabMain Hospital Data` 
+        SET hospital_name=%s,
+            phone_number=%s
+        WHERE name=%s
+    """, (hospital_name, phone_number, name))
+    frappe.db.commit()
+
+    return "Data updated successfully"
+
+#  ----------DELETE FILES--------------------
+
+@frappe.whitelist(allow_guest=True)
+def delete_details():
+    frappe.db.sql("""DELETE FROM 
+    `tabMain Hospital Data` 
+    WHERE name='No-009'""")
+    frappe.db.commit()
+
+    return "Success!"
+
+
+#  ----------DELETE ONLY FIELDS--------------------
+@frappe.whitelist(allow_guest=True)
+def delete_selected_fields(name, fields_to_clear):
+    # Fetch the document by hospital name (or by any identifier you prefer)
+    doc = frappe.get_doc("Main Hospital Data", name)
+    
+    # Clear specified fields
+    for field in fields_to_clear:
+        if hasattr(doc, field):
+            setattr(doc, field, None)  # Clear the field by setting it to None
+
+    # Save the document to apply changes
+    doc.save()
+    frappe.db.commit()
+
+    return f"Selected fields cleared for {name}"
+
+
+
+
+#  ---------------------INSERT CHILD TABLE DATA---------------
+
+
+# @frappe.whitelist(allow_guest=True)
+# def get_child_data(parent_name):
+#     # Fetch the parent document with child table data
+#     parent_doc = frappe.get_doc("Main Hospital Data", parent_name)
+
+#     parent_data = {
+#         "hospital_no": parent_doc.hospital_no,
+#         "hospital_name": parent_doc.hospital_name ,
+#         "phone_number": parent_doc.phone_number,
+#         "address": parent_doc.address,
+#         "email": parent_doc.email,
+#         "hospital_type": parent_doc.hospital_type
+#     }
+
+#     # Extract child table data
+#     child_data = []
+#     for ward in parent_doc.wards:
+#         child_data.append({
+#             "ward_no": ward.ward_no,
+#             "ward_name": ward.ward_name,
+#             "ward_area": ward.ward_area,
+#             "ward_incharge": ward.ward_incharge,
+#             "no_of_nurses": ward.no_of_nurses
+#         })
+
+#     return {
+#         "parent_data": parent_data,
+#         "child_data": child_data
+        
+#         }
+
+# -------------------INSERT CHILD TABLE DATA also all data + parent---------------------
+
+
+@frappe.whitelist(allow_guest=True)
+def get_all_hospital_data():
+    # Fetch all parent documents from the "Main Hospital Data" doctype
+    hospital_docs = frappe.get_all("Main Hospital Data", 
+    fields=["name", "hospital_no", "hospital_name", "phone_number", "address", "email", "hospital_type"])
+
+    # List to store all parent data with child data
+    hospital_data_list = []
+
+    for hospital in hospital_docs:
+        # Fetch the full document to get child table data
+        parent_doc = frappe.get_doc("Main Hospital Data", hospital.name)
+
+        # Prepare parent data
+        parent_data = {
+            "hospital_no": parent_doc.hospital_no,
+            "hospital_name": parent_doc.hospital_name,
+            "phone_number": parent_doc.phone_number,
+            "address": parent_doc.address,
+            "email": parent_doc.email,
+            "hospital_type": parent_doc.hospital_type
+        }
+
+        # Extract child table data, if any
+        child_data = []
+        if hasattr(parent_doc, 'wards'):
+            for ward in parent_doc.wards:
+                child_data.append({
+                    "ward_no": ward.ward_no,
+                    "ward_name": ward.ward_name,
+                    "ward_area": ward.ward_area,
+                    "ward_incharge": ward.ward_incharge,
+                    "no_of_nurses": ward.no_of_nurses
+                })
+
+        # Append the data for each hospital entry, with child data if available
+        hospital_data_list.append({
+            "parent_data": parent_data,
+            "child_data": child_data
+        })
+
+    # Return the list containing all hospital data with child data
+    return hospital_data_list
+
+
+# ----------NOT RECOMMENDED BECAUSE-(When you can insert directly with SQL, it’s riskier because it bypasses validations and dependencies.)-------------
+
+# @frappe.whitelist(allow_guest=True)
+# def insert_child_data_sql(parent_name, ward_no, ward_area, no_of_nurses):
+#     frappe.db.sql("""
+#         INSERT INTO `tabWard Child Data` (parent, parentfield, parenttype, ward_no, ward_area, no_of_nurses)
+#         VALUES (%s, 'ward_child_data', 'Main Hospital Data', %s, %s, %s)
+#     """, (parent_name, ward_no, ward_area, no_of_nurses))
+#     frappe.db.commit()
+
+#     return "Child data inserted successfully"
+
+
+# -------------INSERT CHILD DATA--------------------
+
+@frappe.whitelist(allow_guest=True)
+def insert_child_data(list_name, child_table_name, child_data):
+    # Fetch the parent document by its name
+    parent_doc = frappe.get_doc("Main Hospital Data", list_name)
+    
+    # Append a new row to the specified child table
+    parent_doc.append(child_table_name, child_data)
+    
+    # Save the parent document to apply changes
+    parent_doc.save()
+    frappe.db.commit()
+
+    return f"Child row added to {child_table_name} for {list_name}"
+
+
+    # The way to insert data:
+
+    # {
+    # "list_name": "No-010",
+    # "child_table_name": "wards",
+    # "child_data": {
+    #     "ward_no": "WRD-002",
+    #     "ward_name": "Emergency",
+    #     "ward_area": "45 sqft",
+    #     "ward_incharge": "Dr. Jones",
+    #     "no_of_nurses": 8
+    # }
+
+
+# ----------UPDATE CHILD DATA------------------
+
+@frappe.whitelist(allow_guest=True)
+def update_child_data(list_name, child_table_name, child_row_identifier, updated_data):
+    # Fetch the parent document by its name
+    parent_doc = frappe.get_doc("Main Hospital Data", list_name)
+    
+    # Find the target row in the child table by its identifier
+    row_updated = False
+    for child_row in parent_doc.get(child_table_name):
+        if child_row.name == child_row_identifier:
+            # Update the row's fields with the provided data
+            for key, value in updated_data.items():
+                if hasattr(child_row, key):
+                    setattr(child_row, key, value)
+            row_updated = True
+            break
+    
+    # Check if the row was found and updated
+    if not row_updated:
+        frappe.throw(f"Child row with identifier '{child_row_identifier}' not found in {child_table_name}.")
+
+    # Save the parent document to apply changes
+    parent_doc.save()
+    frappe.db.commit()
+
+    return f"Child row '{child_row_identifier}' in {child_table_name} updated successfully."
+
+
+    # The way to update data:
+
+#     {
+#     "list_name": "Rashid Latif Hospital",
+#     "child_table_name": "wards",
+#     "child_row_identifier": "WARD-0001",  // Replace with the actual row identifier
+#     "updated_data": {
+#         "ward_no": 2,
+#         "ward_name": "Updated Emergency",
+#         "ward_area": "50 sqft",
+#         "ward_incharge": "Dr. John",
+#         "no_of_nurses": 10
+#     }
+# }
+
+
+# --------TO FIND CHILD TABLE RoW NAME & ALSO THEIR FIELDS--------------------
+
+
+@frappe.whitelist(allow_guest=True)
+def get_child_table_rows_with_names(parent_name):
+    # Fetch the parent document by its name
+    parent_doc = frappe.get_doc("Main Hospital Data", parent_name)
+    
+    # Gather child rows with their `name` identifiers
+    child_data = []
+    for ward in parent_doc.wards:
+        child_data.append({
+            "row_name": ward.name,
+            "ward_no": ward.ward_no,
+            "ward_name": ward.ward_name,
+            "ward_area": ward.ward_area,
+            "ward_incharge": ward.ward_incharge,
+            "no_of_nurses": ward.no_of_nurses
+        })
+
+    return child_data
+
+
+
+# ----------Code to Delete a Specific Child Table Row--------------------
+
+@frappe.whitelist(allow_guest=True)
+def delete_child_row(row_name):
+    try:
+        # Delete the child row using its unique row name  // You should write CHILD DOC name instead of parent doc name on row_name in postman
+        frappe.delete_doc("Ward Child", row_name)
+        frappe.db.commit()  # Commit the changes to the database
+        return {"message": f"Row {row_name} deleted successfully."}
+    except frappe.DoesNotExistError:
+        return {"error": f"Row {row_name} does not exist."}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# -------------Deleting All Child Rows of a Parent Document-----------------
+
+
+@frappe.whitelist(allow_guest=True)
+def delete_all_child_rows(parent_name):
+    try:
+        # Fetch the parent document
+        parent_doc = frappe.get_doc("Main Hospital Data", parent_name)
+        
+        # Clear all rows in the child table
+        parent_doc.set("wards", [])
+        parent_doc.save()
+        frappe.db.commit()
+        
+        return {"message": f"All child rows for {parent_name} deleted successfully."}
+    except frappe.DoesNotExistError:
+        return {"error": f"Parent document {parent_name} does not exist."}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+
+
+# -----------------Code to Clear Selected Fields in a Child Table Row--------------------------
+
+
+import frappe
+
+@frappe.whitelist(allow_guest=True)
+def clear_fields_in_child_row(row_name, fields_to_clear):
+    try:
+        # Get the child table row by its unique row name // You should write the Child's DOC name instead of main DOC Name
+        child_row = frappe.get_doc("Ward Child", row_name)
+        
+        # Clear specified fields in the child row
+        for field in fields_to_clear:
+            if hasattr(child_row, field):
+                setattr(child_row, field, None)  # Set the field to None or an empty string ""
+        
+        # Save the child row with updated fields
+        child_row.save()
+        frappe.db.commit()  # Commit the changes to the database
+        
+        return {"message": f"Fields {fields_to_clear} cleared in row {row_name}."}
+    except frappe.DoesNotExistError:
+        return {"error": f"Row {row_name} does not exist."}
+    except Exception as e:
+        return {"error": str(e)}
